@@ -55,8 +55,8 @@ namespace RASTER_DATA {
     VoxelData VoxelData::sizeAloc(char*& chunk, size_t N)
     {
         VoxelData voxinfo;
-        obtain(chunk, voxinfo.n_duplicates, N, 128);
-        obtain(chunk, voxinfo.n_duplicates_csum, N, 128);
+        obtain(chunk, voxinfo.ndup_per_vox, N, 128);
+        obtain(chunk, voxinfo.ndup_per_vox_csum, N, 128);
         obtain(chunk, voxinfo.bboxes, N, 128);
         obtain(chunk, voxinfo.cam_quadrant_bitsets, N, 128);
 
@@ -65,8 +65,8 @@ namespace RASTER_DATA {
         cub::DeviceScan::InclusiveSum(
             nullptr,
             voxinfo.temp_csum_bytes,
-            voxinfo.n_duplicates,
-            voxinfo.n_duplicates,
+            voxinfo.ndup_per_vox,
+            voxinfo.ndup_per_vox, // For in-place scan
             N
         );
         obtain(chunk, voxinfo.temp_csum_storage, voxinfo.temp_csum_bytes, 128);

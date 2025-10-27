@@ -29,8 +29,8 @@ namespace RASTER_DATA {
         // There are N voxels.
 
         // Render data
-        uint32_t* n_duplicates; // Nx1 array to store num required duplication for each voxel: num_tiles * num_morton_direction
-        uint32_t* n_duplicates_csum; // Nx1 array to store cumulative sum of n_duplicates, used for BindingData allocation
+        uint32_t* ndup_per_vox; // Nx1 array to store num required duplication for each voxel: num_tiles * num_morton_direction
+        uint32_t* ndup_per_vox_csum; // Nx1 array to store cumulative sum of n_duplicates, used for BindingData allocation
 
         // processing meta for cumulative sum later on
         char* temp_csum_storage;
@@ -50,7 +50,7 @@ namespace RASTER_DATA {
 
     struct BindingVoxel2RayData
     {   
-        // Ndup is total duplicated voxels
+        // Ndup is total duplicated voxels: sum(ndup_per_vox)
         // Temporary data for sorting
         char* temp_sorting_storage;
         size_t temp_storage_bytes;

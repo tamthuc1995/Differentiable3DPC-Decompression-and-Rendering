@@ -9,7 +9,7 @@ class View:
     '''
     def __init__(
         self, world2view, fovx, fovy, cx_p, cy_p,
-        rendered_view, viewed_pc, view_name,
+        rendered_view, view_name,
         near=0.02,
     ):
 
@@ -32,11 +32,6 @@ class View:
         self.cy_p = cy_p
         self.near = near
 
-        # Load sparse depth
-        if viewed_pc is not None:
-            self.viewed_pc = torch.tensor(viewed_pc, dtype=torch.float32)
-        else:
-            self.viewed_pc = None
 
     def __repr__(self):
         clsname = self.__class__.__name__
@@ -87,6 +82,7 @@ class View:
     @property
     def tanfovy(self):
         return np.tan(self.fovy * 0.5)
+    
 
     def project2view(self, pc_positions, return_depth=False):
         # Return normalized image coordinate in [-1, 1]
@@ -109,7 +105,7 @@ class ViewCreator:
         self.res_downscale = res_downscale
         self.res_width = res_width
 
-    def __call__(self, image, world2view, fovx, fovy, cx_p=0.5, cy_p=0.5, viewed_pc=None, view_name=""):
+    def __call__(self, image, world2view, fovx, fovy, cx_p=0.5, cy_p=0.5, view_name=""):
 
         # Get target resolution
         if self.res_downscale > 0:
@@ -135,6 +131,5 @@ class ViewCreator:
             fovx=fovx, fovy=fovy,
             cx_p=cx_p, cy_p=cy_p,
             rendered_view=img_arr,
-            viewed_pc=viewed_pc,
             view_name=view_name
         )

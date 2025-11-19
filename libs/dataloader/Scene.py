@@ -17,7 +17,6 @@ class PointCloud(NamedTuple):
     positions: np.array
     rgb: np.array
     err: np.array
-    view2points: dict
 
 
 class Scene:
@@ -33,7 +32,7 @@ class Scene:
 
         if os.path.exists(sparse_path) or os.path.exists(colmap_path):
             print("Read dataset in COLMAP format.")
-            point_cloud, views_construct_list = read_from_colmap_dataset(
+            point_cloud, views2points, views_construct_list = read_from_colmap_dataset(
                 source_path=source_path,
                 image_dir_name=image_dir_name
             )
@@ -41,6 +40,8 @@ class Scene:
             raise Exception("Unknown scene type!")
         
         self.point_cloud = point_cloud
+        self.views2points = views2points # dict: (view_name, points_ind)
+
         self.viewDataTrain = []
         self.viewDataTest  = []
         view_creator = ViewCreator(
@@ -104,18 +105,17 @@ def read_from_colmap_dataset(source_path, image_dir_name):
     points_idmap = np.full([p_id.max()+2], -1, dtype=np.int64)
     points_idmap[p_id] = np.arange(num_p)
 
-    view2points = {}
+    views2points = {}
     for image in SfM.images.values():
         matchs = np.array([p.point3D_id for p in image.points2D if p.has_point3D()])
         matched_p_id = points_idmap[matchs]
         assert matched_p_id.min() >= 0 and matched_p_id.max() < num_p
-        view2points[image.name] = matched_p_id
+        views2points[image.name] = matched_p_id
 
     point_cloud = PointCloud(
         positions=pc_positions,
         rgb=pc_rgb,
         err=pc_err,
-        view2points=view2points
     )
 
     ########################################################
@@ -160,9 +160,6 @@ def read_from_colmap_dataset(source_path, image_dir_name):
             # Older version of pycolmap
             world2view[:3] = view.cam_from_world.matrix()
 
-        # Load points positions are seen in view
-        viewed_pc = point_cloud.positions[point_cloud.view2points[view.name]]
-
         views_construct_list.append(dict(
             image=image,
             world2view=world2view,
@@ -170,9 +167,8 @@ def read_from_colmap_dataset(source_path, image_dir_name):
             fovy=fovy,
             cx_p=cx_p,
             cy_p=cy_p,
-            viewed_pc=viewed_pc,
             view_name=view.name,
         ))
     
-    return point_cloud, views_construct_list
+    return point_cloud, views2points, views_construct_list
 

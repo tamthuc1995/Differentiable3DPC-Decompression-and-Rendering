@@ -39,7 +39,7 @@ namespace RASTER_DATA {
     }
 
     template<typename T>
-    size_t size_required(size_t N1, size_t N2);
+    size_t size_required(size_t N1, size_t N2)
     {
         char* size = nullptr;
         T::sizeAloc(size, N1, N2);
@@ -118,5 +118,3 @@ namespace RASTER_DATA {
     //     const torch::Tensor& vox);
 
 }
-
-#endif

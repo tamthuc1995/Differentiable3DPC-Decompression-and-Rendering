@@ -28,7 +28,7 @@ def rasterize_voxels(
         camera_settings: CameraSettings,
         render_settings: RenderSettings,
         vox_roots: torch.Tensor,
-        vox_level: torch.Tensor,
+        vox_length: torch.Tensor,
         vox_fn,
     ):
 
@@ -45,14 +45,14 @@ def rasterize_voxels(
     if len(vox_roots.shape) != 2 or vox_roots.shape[1] != 3:
         raise Exception("Expect vox_centers in shape [N, 3].")
     ##
-    if CameraSettings.w2c_matrix.device != device or \
-            CameraSettings.c2w_matrix.device != device or \
+    if camera_settings.w2c_matrix.device != device or \
+            camera_settings.c2w_matrix.device != device or \
             vox_roots.device != device:
         raise Exception("Device mismatch.")
 
 
-    # Preprocess octree
-    n_duplicates, geomBuffer = _C.rasterize_preprocess(
+    # # Preprocess octree
+    n_duplicates, geomBuffer, outTemp = _C.rasterize_preprocess(
         # Cam setting
         camera_settings.image_width,
         camera_settings.image_height,
@@ -68,12 +68,11 @@ def rasterize_voxels(
 
         # Geometry data
         vox_roots,
-        vox_level,
+        vox_length,
         
         # Debug flag
         render_settings.debug,
     )
-
+    torch.cuda.synchronize()
     
-
-    return (n_duplicates, geomBuffer)
+    return (n_duplicates, geomBuffer, outTemp)

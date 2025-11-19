@@ -11,8 +11,11 @@ setup(
             name="decompress_render._C",
             sources=[
                 "src/utils.cu",
+                "src/raster_data.cu",
+                "src/preprocess.cu",
                 "binding.cpp"
             ],
+            # extra_compile_args={"nvcc": ["-g -G"]},
         )
     ],
     cmdclass={

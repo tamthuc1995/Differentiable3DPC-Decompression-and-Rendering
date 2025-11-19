@@ -1,4 +1,3 @@
-
 #ifndef RASTERIZER_AUXILIARY_H_INCLUDED
 #define RASTERIZER_AUXILIARY_H_INCLUDED
 
@@ -13,7 +12,7 @@ __forceinline__ __device__ float dot(const float3& a, const float3& b)
 
 __forceinline__ __device__ float3 get_cam_position(const float* c2w_3x4matrix)
 {
-    float3 last_col = {c2w_matrix[3], c2w_matrix[7], c2w_matrix[11]};
+    float3 last_col = {c2w_3x4matrix[3], c2w_3x4matrix[7], c2w_3x4matrix[11]};
     return last_col;
 }
 

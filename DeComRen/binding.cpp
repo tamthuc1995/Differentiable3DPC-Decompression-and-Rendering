@@ -4,6 +4,7 @@
 
 #include "src/raster_data.h"
 #include "src/preprocess.h"
+#include "src/gather_voxel_params.h"
 
 #include "src/utils.h"
 
@@ -14,6 +15,12 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, modulee) {
 
     // Preprocessing
     modulee.def("rasterize_preprocess", &PREPROCESS::rasterize_preprocess);
+
+    // Voxel params gathering operation
+    modulee.def("gather_geo_params", &VOXEL_PARAMS_GATHER::gather_geo_params);
+    modulee.def("gather_geo_params_bw", &VOXEL_PARAMS_GATHER::gather_geo_params_bw);
+    modulee.def("gather_color_params", &VOXEL_PARAMS_GATHER::gather_color_params);
+    modulee.def("gather_color_params_bw", &VOXEL_PARAMS_GATHER::gather_color_params_bw);
 
     // Read only constants
     modulee.attr("MAX_NUM_SAMPLE")    = pybind11::int_(MAX_NUM_SAMPLE);

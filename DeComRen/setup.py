@@ -13,6 +13,7 @@ setup(
                 "src/utils.cu",
                 "src/raster_data.cu",
                 "src/preprocess.cu",
+                "src/gather_voxel_params.cu",
                 "binding.cpp"
             ],
             # extra_compile_args={"nvcc": ["-g -G"]},

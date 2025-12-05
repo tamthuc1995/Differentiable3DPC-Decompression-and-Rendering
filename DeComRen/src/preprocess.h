@@ -7,7 +7,7 @@
 namespace PREPROCESS {
 
     // Interface for python to find the voxel to render and compute some init values.
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+    std::tuple<torch::Tensor, torch::Tensor>
     rasterize_preprocess(
         // Cam setting
         const int image_width, const int image_height,

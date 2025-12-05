@@ -76,15 +76,15 @@ namespace VOXEL_PARAMS_GATHER {
         // Color now only have RGB so this is a very simple gather operation
 
         // Write to voxel geo param
-        gathered_color_params[idx] = color_params[i];
+        gathered_color_params[idx] = color_params[idx];
     }
 
 
     __global__ void gather_color_params_bw_cuda(
         const int num_visible,
         const int64_t* __restrict__ visible_vox,
-        const float3* __restrict__ dL_drgb_params,
-        float3* __restrict__ dL_dcolor_params)
+        const float* __restrict__ dL_drgb_params,
+        float* __restrict__ dL_dcolor_params)
     {
         auto tid = cg::this_grid().thread_rank();
         if (tid >= num_visible)
@@ -96,7 +96,9 @@ namespace VOXEL_PARAMS_GATHER {
         // Color now only have RGB so this is a very simple attributing operation
 
         // Write to voxel geo param
-        atomicAdd(dL_dcolor_params + idx, dL_drgb_params[idx]);
+        atomicAdd(dL_dcolor_params + 3*idx + 0, dL_drgb_params[3*idx+0]);
+        atomicAdd(dL_dcolor_params + 3*idx + 1, dL_drgb_params[3*idx+1]);
+        atomicAdd(dL_dcolor_params + 3*idx + 2, dL_drgb_params[3*idx+2]);
     }
 
     // Python interface for gather corners value into each voxel.
@@ -163,7 +165,7 @@ namespace VOXEL_PARAMS_GATHER {
                 (float3*)(gathered_color_params.contiguous().data_ptr<float>())
             );
 
-        return feat_params;
+        return gathered_color_params;
     }
 
     torch::Tensor gather_color_params_bw(
@@ -185,9 +187,9 @@ namespace VOXEL_PARAMS_GATHER {
             gather_color_params_bw_cuda <<<(num_visible + 255) / 256, 256>>> (
                 num_visible,
                 visible_vox.contiguous().data_ptr<int64_t>(),
-                (float3*)(dL_drgb_params.contiguous().data_ptr<float>()),
-                (float3*)(dL_dcolor_params.contiguous().data_ptr<float>())
+                dL_drgb_params.contiguous().data_ptr<float>(),
+                dL_dcolor_params.contiguous().data_ptr<float>()
             );
-        return dL_dgrid_pts;
+        return dL_dcolor_params;
     }
 }

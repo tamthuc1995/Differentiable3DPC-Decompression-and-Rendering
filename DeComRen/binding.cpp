@@ -4,6 +4,8 @@
 
 #include "src/raster_data.h"
 #include "src/preprocess.h"
+#include "src/render_forward.h"
+#include "src/render_backward.h"
 #include "src/gather_voxel_params.h"
 
 #include "src/utils.h"
@@ -15,6 +17,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, modulee) {
 
     // Preprocessing
     modulee.def("rasterize_preprocess", &PREPROCESS::rasterize_preprocess);
+    
+    // rendering
+    modulee.def("voxels_rasterizing", &VOXEL_RASTERIZER::voxels_rasterizing);
+    modulee.def("voxels_backward_rasterizing", &VOXEL_RASTERIZER_BACKWARD::voxels_backward_rasterizing);
 
     // Voxel params gathering operation
     modulee.def("gather_geo_params", &VOXEL_PARAMS_GATHER::gather_geo_params);

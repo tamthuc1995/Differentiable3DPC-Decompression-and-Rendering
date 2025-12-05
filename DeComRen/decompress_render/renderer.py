@@ -32,17 +32,22 @@ def gather_geometry_and_color(
 
 
     # Gather the density values at the eight corners of each voxel.
-
-
+    geos = GatherGeoParams.apply(
+        visible_vox,
+        vox2corners,
+        geometry_params,
+    )
 
     # Gather/Compute voxel colors
-
-
+    rgbs = GatherColorParams.appeny(
+        visible_vox,
+        color_params
+    )
 
     # Pack everything
     vox_params = {
-        'geos': None,
-        'rgbs': None,
+        'geos': geos,
+        'rgbs': rgbs,
         'subdiv_p': None, # Dummy param to record subdivision priority
     }
     if vox_params['subdiv_p'] is None:
@@ -56,6 +61,7 @@ def rasterize_voxels_main(
         render_settings: RenderSettings,
         vox_roots: torch.Tensor,
         vox_length: torch.Tensor,
+        vox2corners: torch.Tensor,
         vox_params_geo: torch.Tensor,
         vox_params_color: torch.Tensor,
     ):
@@ -80,7 +86,7 @@ def rasterize_voxels_main(
 
 
     # # Preprocess octree
-    n_duplicates, geomBuffer, outTemp = _C.rasterize_preprocess(
+    n_duplicates, voxelDataBuffer = _C.rasterize_preprocess(
         # Cam setting
         camera_settings.image_width,
         camera_settings.image_height,
@@ -97,7 +103,10 @@ def rasterize_voxels_main(
         # Geometry data
         vox_roots,
         vox_length,
-        
+        vox2corners,
+        vox_params_geo,
+        vox_params_color,
+
         # Debug flag
         render_settings.debug,
     )
@@ -105,9 +114,10 @@ def rasterize_voxels_main(
 
 
     # Gather 3D scene paramerters
-    in_frusts_idx = torch.where(n_duplicates > 0)[0]
+    visible_vox_idx = torch.where(n_duplicates > 0)[0]
     # Forward voxel parameters
-    vox_params = gather_geometry_and_color(in_frusts_idx, vox_params_geo, vox_params_color)
+
+    vox_params = gather_geometry_and_color(visible_vox_idx, vox2corners, vox_params_geo, vox_params_color)
     geos = vox_params['geos']
     rgbs = vox_params['rgbs']
     subdiv_p = vox_params['subdiv_p']
@@ -129,24 +139,139 @@ def rasterize_voxels_main(
         raise Exception("Device mismatch: subdiv_p.")
 
 
-    return (n_duplicates, geomBuffer, outTemp)
-    # result_rendered = _RasterizeVoxels.apply(
-    #     camera_settings,
-    #     render_settings,
-    #     geomBuffer,
+    result_rendered = VoxelRasterizer.apply(
+        camera_settings,
+        render_settings,
+        voxelDataBuffer,
 
-    #     # Geometry data
-    #     vox_roots,
-    #     vox_length,
+        # Geometry data
+        vox_roots,
+        vox_length,
+
+        # 3d scene parameters
+        geos,
+        rgbs,
+        subdiv_p
+    )
+
+    return result_rendered
+
+
+class VoxelRasterizer(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx,
+        camera_settings,
+        raster_settings,
+        voxelDataBuffer,
+
+        # Geometry data
+        vox_roots,
+        vox_length,
+
+        geos,
+        rgbs,
+        subdiv_p
+    ):
+
+
+        args = (
+            camera_settings.image_width,
+            camera_settings.image_height,
+            camera_settings.tanfovx,
+            camera_settings.tanfovy,
+            camera_settings.cx,
+            camera_settings.cy,
+            camera_settings.w2c_matrix,
+            camera_settings.c2w_matrix,
+
+            raster_settings.n_samp_per_vox,
+            raster_settings.bg_color,
+            raster_settings.need_depth,
+            raster_settings.track_max_w,
+
+            vox_roots,
+            vox_length,
+            geos,
+            rgbs,
+            voxelDataBuffer,
+
+            raster_settings.debug,
+        )
+
+        num_vox_duplicated, voxels2raysBuffer, raysBuffer, out_color, out_T, max_w = _C.voxels_rasterizing(*args)
+
+        # Keep relevant tensors for backward
+        ctx.camera_settings    = camera_settings
+        ctx.raster_settings    = raster_settings
+        ctx.num_vox_duplicated = num_vox_duplicated
+
+        ctx.save_for_backward(
+            vox_roots, vox_length,
+            geos, rgbs,
+            voxelDataBuffer, voxels2raysBuffer, raysBuffer, out_T)
+        ctx.mark_non_differentiable(max_w)
+        return out_color, out_T, max_w
+
+    @staticmethod
+    def backward(ctx, dL_dout_color):
+        # Restore necessary values from context
+        camera_settings = ctx.camera_settings
+        raster_settings = ctx.raster_settings
+        num_vox_duplicated = ctx.num_vox_duplicated
+        (
+            vox_roots, vox_length, 
+            geos, rgbs, voxelDataBuffer, 
+            voxels2raysBuffer, raysBuffer, out_T
+        ) = ctx.saved_tensors
+
         
-    #     # 3d scene parameters
-    #     geos,
-    #     rgbs,
-    #     subdiv_p,
-    # )
-    
+        args = (
+            num_vox_duplicated,
 
-    # return result_rendered
+            camera_settings.image_width,
+            camera_settings.image_height,
+            camera_settings.tanfovx,
+            camera_settings.tanfovy,
+            camera_settings.cx,
+            camera_settings.cy,
+            camera_settings.w2c_matrix,
+            camera_settings.c2w_matrix,
+
+            raster_settings.n_samp_per_vox,
+            raster_settings.bg_color,
+
+            vox_roots,
+            vox_length,
+            geos,
+            rgbs,
+
+            voxelDataBuffer,
+            voxels2raysBuffer,
+            raysBuffer,
+            out_T,
+
+            dL_dout_color,
+
+            raster_settings.debug,
+        )
+
+        dL_dgeos, dL_drgbs, subdiv_p_bw = _C.voxels_backward_rasterizing(*args)
+
+        grads = (
+            None, # => camera_settings
+            None, # => raster_settings
+            None, # => voxelDataBuffer
+            None, # => vox_roots
+            None, # => vox_length
+            dL_dgeos, # => geos
+            dL_drgbs, # => rgbs
+            subdiv_p_bw, # => subdivision priority
+        )
+
+        return grads
+
+
 
 class GatherGeoParams(torch.autograd.Function):
     @staticmethod
@@ -203,121 +328,3 @@ class GatherColorParams(torch.autograd.Function):
         dL_dcolor_params = _C.gather_color_params_bw(visible_vox, num_voxels, dL_drgb_params)
 
         return None, None, dL_dcolor_params
-
-
-# class _RasterizeVoxels(torch.autograd.Function):
-#     @staticmethod
-#     def forward(
-#         ctx,
-#         raster_settings,
-#         geomBuffer,
-#         octree_paths,
-#         vox_centers,
-#         vox_lengths,
-#         geos,
-#         rgbs,
-#         subdiv_p,
-#     ):
-
-#         need_distortion = raster_settings.lambda_dist > 0
-
-#         args = (
-#             raster_settings.n_samp_per_vox,
-#             raster_settings.image_width,
-#             raster_settings.image_height,
-#             raster_settings.tanfovx,
-#             raster_settings.tanfovy,
-#             raster_settings.cx,
-#             raster_settings.cy,
-#             raster_settings.w2c_matrix,
-#             raster_settings.c2w_matrix,
-#             raster_settings.bg_color,
-#             raster_settings.need_depth,
-#             need_distortion,
-#             raster_settings.need_normal,
-#             raster_settings.track_max_w,
-
-#             octree_paths,
-#             vox_centers,
-#             vox_lengths,
-#             geos,
-#             rgbs,
-
-#             geomBuffer,
-
-#             raster_settings.debug,
-#         )
-
-#         num_rendered, binningBuffer, imgBuffer, out_color, out_depth, out_normal, out_T, max_w = _C.rasterize_voxels(*args)
-
-#         # Keep relevant tensors for backward
-#         ctx.raster_settings = raster_settings
-#         ctx.num_rendered = num_rendered
-#         ctx.save_for_backward(
-#             octree_paths, vox_centers, vox_lengths,
-#             geos, rgbs,
-#             geomBuffer, binningBuffer, imgBuffer, out_T, out_depth, out_normal)
-#         ctx.mark_non_differentiable(max_w)
-#         return out_color, out_depth, out_normal, out_T, max_w
-
-#     @staticmethod
-#     def backward(ctx, dL_dout_color):
-#         # Restore necessary values from context
-#         raster_settings = ctx.raster_settings
-#         num_rendered = ctx.num_rendered
-#         octree_paths, vox_centers, vox_lengths, \
-#             geos, rgbs, \
-#             geomBuffer, binningBuffer, imgBuffer, out_T, out_depth, out_normal = ctx.saved_tensors
-
-#         args = (
-#             num_rendered,
-#             raster_settings.n_samp_per_vox,
-#             raster_settings.image_width,
-#             raster_settings.image_height,
-#             raster_settings.tanfovx,
-#             raster_settings.tanfovy,
-#             raster_settings.cx,
-#             raster_settings.cy,
-#             raster_settings.w2c_matrix,
-#             raster_settings.c2w_matrix,
-#             raster_settings.bg_color,
-
-#             octree_paths,
-#             vox_centers,
-#             vox_lengths,
-#             geos,
-#             rgbs,
-
-#             geomBuffer,
-#             binningBuffer,
-#             imgBuffer,
-#             out_T,
-
-#             dL_dout_color,
-
-#             raster_settings.lambda_R_concen,
-#             raster_settings.gt_color,
-#             raster_settings.lambda_ascending,
-#             raster_settings.lambda_dist,
-#             raster_settings.need_depth,
-#             raster_settings.need_normal,
-#             out_depth,
-#             out_normal,
-
-#             raster_settings.debug,
-#         )
-
-#         dL_dgeos, dL_drgbs, subdiv_p_bw = _C.rasterize_voxels_backward(*args)
-
-#         grads = (
-#             None, # => raster_settings
-#             None, # => geomBuffer
-#             None, # => octree_paths
-#             None, # => vox_centers
-#             None, # => vox_lengths
-#             dL_dgeos, # => geos
-#             dL_drgbs, # => rgbs
-#             subdiv_p_bw, # => subdivision priority
-#         )
-
-#         return grads

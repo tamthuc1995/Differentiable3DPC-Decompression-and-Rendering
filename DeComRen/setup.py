@@ -13,6 +13,8 @@ setup(
                 "src/utils.cu",
                 "src/raster_data.cu",
                 "src/preprocess.cu",
+                "src/render_forward.cu",
+                "src/render_backward.cu",
                 "src/gather_voxel_params.cu",
                 "binding.cpp"
             ],

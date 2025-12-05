@@ -28,7 +28,6 @@ namespace PREPROCESS {
         const float* __restrict__ vox_length,
 
         int* __restrict__ output_ndup_per_vox,
-        float2* __restrict__ output_img_bbox,
         uint32_t* __restrict__ ndup_per_vox,
         uint2* __restrict__ bboxes,
         uint32_t* __restrict__ cam_quadrant_bitsets,
@@ -45,9 +44,9 @@ namespace PREPROCESS {
         output_ndup_per_vox[idx] = 0;
         ndup_per_vox[idx] = 0;
 
-        // 
-        output_img_bbox[idx*2 + 0] = {1e9f, 1e9f};
-        output_img_bbox[idx*2 + 1] = {-1e9f, -1e9f};
+        // DEBUG
+        // output_img_bbox[idx*2 + 0] = {1e9f, 1e9f};
+        // output_img_bbox[idx*2 + 1] = {-1e9f, -1e9f};
 
 
         // Load from global memory.
@@ -153,8 +152,9 @@ namespace PREPROCESS {
         };
 
         
-        output_img_bbox[idx*2 + 0] = img_bbox_min;
-        output_img_bbox[idx*2 + 1] = img_bbox_max;
+        // DEBUG
+        // output_img_bbox[idx*2 + 0] = img_bbox_min;
+        // output_img_bbox[idx*2 + 1] = img_bbox_max;
     
         // Compute tile range.
         // Make sure that tile possition is in range (0, parallel_2d_grid.x) x (0, parallel_2d_grid.y)
@@ -186,7 +186,7 @@ namespace PREPROCESS {
     
     // Interface for python to preprocess voxels and find intersected vox
     //  also doing some raster data preparation 
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+    std::tuple<torch::Tensor, torch::Tensor>
     rasterize_preprocess(
         const int image_width, const int image_height,
         const float tan_fovx, const float tan_fovy,
@@ -214,11 +214,12 @@ namespace PREPROCESS {
 
         torch::Tensor voxelDataBuffer = torch::empty({0}, t_opt_byte);
         torch::Tensor output_ndup_per_vox = torch::full({N}, 0, t_opt_int32);
-        torch::Tensor output_temp = torch::full({N*2*2}, 0, t_opt_float32);
+        // DEBUG output
+        // torch::Tensor output_temp = torch::full({N*2*2}, 0, t_opt_float32);
 
         // Allocate Voxel data for rendering
         size_t chunk_size = RASTER_DATA::size_required<RASTER_DATA::VoxelData>(N);
-        printf("chunk_size: %d \n", chunk_size);
+        // printf("chunk_size: %d \n", chunk_size);
         voxelDataBuffer.resize_({(long long)chunk_size});
         char* chunkptr = reinterpret_cast<char*>(voxelDataBuffer.contiguous().data_ptr());
         RASTER_DATA::VoxelData voxData = RASTER_DATA::VoxelData::sizeAloc(chunkptr, N);
@@ -248,7 +249,7 @@ namespace PREPROCESS {
             vox_length.contiguous().data_ptr<float>(),
 
             output_ndup_per_vox.contiguous().data_ptr<int>(),
-            (float2*)(output_temp.contiguous().data_ptr<float>()),
+            // (float2*)(output_temp.contiguous().data_ptr<float>()),
             voxData.ndup_per_vox,
             voxData.bboxes,
             voxData.cam_quadrant_bitsets,
@@ -256,7 +257,7 @@ namespace PREPROCESS {
             parallel_2d_grid);
         CHECK_CUDA(debug);
 
-        return std::make_tuple(output_ndup_per_vox, voxelDataBuffer, output_temp);
+        return std::make_tuple(output_ndup_per_vox, voxelDataBuffer);
         // const auto tensor_opt = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA);
         // torch::Tensor A = torch::empty({10, 3}, tensor_opt);
         // torch::Tensor B = torch::empty({10, 3}, tensor_opt);

@@ -101,20 +101,9 @@ namespace RASTER_DATA {
     {
         GroupRaysData groups;
         obtain(chunk, groups.first2last, ngroups, 128);
-        obtain(chunk, groups.actual_last, ngroups, 128);
-        obtain(chunk, groups.actual_cost, nrays, 128);
+        obtain(chunk, groups.tile_last_vox, ngroups, 128);
+        obtain(chunk, groups.actual_scanned_vox, nrays, 128);
         return groups;
     }
-
-    // DEBUGING UTIL
-    // std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
-    // unpack_ImageState(
-    //     const int image_width, const int image_height,
-    //     const torch::Tensor& imageBuffer);
-
-    // torch::Tensor filter_voxels_data(
-    //     const int ori_P,
-    //     const torch::Tensor& indices,
-    //     const torch::Tensor& vox);
 
 }

@@ -158,14 +158,19 @@ namespace PREPROCESS {
     
         // Compute tile range.
         // Make sure that tile possition is in range (0, parallel_2d_grid.x) x (0, parallel_2d_grid.y)
+        // Re unpact img_bbox 
+        uint32_t xmin = (img_bbox.x >> 16);
+        uint32_t ymin = (img_bbox.x << 16 >> 16);
+        uint32_t xmax = (img_bbox.y >> 16);
+        uint32_t ymax = (img_bbox.y << 16 >> 16);
         uint2 min_block2d, max_block2d;
         min_block2d = {
-            (uint32_t)max(0, min(((int)parallel_2d_grid.x)-1, (int)(img_bbox_min.x / BLOCK2D_X))),
-            (uint32_t)max(0, min(((int)parallel_2d_grid.y)-1, (int)(img_bbox_min.y / BLOCK2D_Y)))
+            (uint32_t)max(0, min(((int)parallel_2d_grid.x)-1, (int)(xmin / BLOCK2D_X))),
+            (uint32_t)max(0, min(((int)parallel_2d_grid.y)-1, (int)(ymin / BLOCK2D_Y)))
         };
         max_block2d = {
-            (uint32_t)max(0, min(((int)parallel_2d_grid.x)-1, (int)(img_bbox_max.x / BLOCK2D_X))),
-            (uint32_t)max(0, min(((int)parallel_2d_grid.y)-1, (int)(img_bbox_max.y / BLOCK2D_Y)))
+            (uint32_t)max(0, min(((int)parallel_2d_grid.x)-1, (int)(xmax / BLOCK2D_X))),
+            (uint32_t)max(0, min(((int)parallel_2d_grid.y)-1, (int)(ymax / BLOCK2D_Y)))
         };
         int num_block2d_touched = (1 + max_block2d.y - min_block2d.y) * (1 + max_block2d.x - min_block2d.x);
         // if (num_block2d_touched <= 0)
@@ -225,7 +230,7 @@ namespace PREPROCESS {
         RASTER_DATA::VoxelData voxData = RASTER_DATA::VoxelData::sizeAloc(chunkptr, N);
         
         // Parallel rendering block grid size
-        dim3 parallel_2d_grid((image_width + BLOCK2D_X - 1) / BLOCK2D_X, (image_height + BLOCK2D_Y - 1) / BLOCK2D_Y, 1);
+        dim3 tile_grid((image_width + BLOCK2D_X - 1) / BLOCK2D_X, (image_height + BLOCK2D_Y - 1) / BLOCK2D_Y, 1);
         // Get Camera Intrinsic Matrix parameters
         // K = [
         //    |f_x |0   |c_x |\\
@@ -254,7 +259,7 @@ namespace PREPROCESS {
             voxData.bboxes,
             voxData.cam_quadrant_bitsets,
 
-            parallel_2d_grid);
+            tile_grid);
         CHECK_CUDA(debug);
 
         return std::make_tuple(output_ndup_per_vox, voxelDataBuffer);

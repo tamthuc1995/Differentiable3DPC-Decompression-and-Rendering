@@ -62,10 +62,12 @@ voxels_backward_rasterizing(
 
     // Retrive raster state from pytorch tensor
     char* voxdataB_ptr = reinterpret_cast<char*>(voxelDataBuffer.contiguous().data_ptr());
-    char* vox2rayB_ptr = reinterpret_cast<char*>(voxels2raysBuffer.contiguous().data_ptr());
-    char* raysB_ptr = reinterpret_cast<char*>(raysBuffer.contiguous().data_ptr());
     RASTER_DATA::VoxelData voxelData = RASTER_DATA::VoxelData::sizeAloc(voxdataB_ptr, N);
-    RASTER_DATA::BindingVoxel2RayData binningVox2RayData = RASTER_DATA::BindingVoxel2RayData::sizeAloc(vox2rayB_ptr, R);
+
+    char* vox2rayB_ptr = reinterpret_cast<char*>(voxels2raysBuffer.contiguous().data_ptr());
+    RASTER_DATA::BindingVoxel2RayData voxels2raysFunc = RASTER_DATA::BindingVoxel2RayData::sizeAloc(vox2rayB_ptr, R);
+    
+    char* raysB_ptr = reinterpret_cast<char*>(raysBuffer.contiguous().data_ptr());
     RASTER_DATA::GroupRaysData raysData = RASTER_DATA::GroupRaysData::sizeAloc(
         raysB_ptr, 
         image_width * image_height, 

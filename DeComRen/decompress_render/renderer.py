@@ -39,7 +39,7 @@ def gather_geometry_and_color(
     )
 
     # Gather/Compute voxel colors
-    rgbs = GatherColorParams.appeny(
+    rgbs = GatherColorParams.apply(
         visible_vox,
         color_params
     )
@@ -51,7 +51,7 @@ def gather_geometry_and_color(
         'subdiv_p': None, # Dummy param to record subdivision priority
     }
     if vox_params['subdiv_p'] is None:
-        vox_params['subdiv_p'] = torch.ones([geometry_params.shape[0], 1], device=geometry_params.device)
+        vox_params['subdiv_p'] = torch.ones([color_params.shape[0], 1], device=geometry_params.device)
 
     return vox_params
 
@@ -59,6 +59,7 @@ def gather_geometry_and_color(
 def rasterize_voxels_main(
         camera_settings: CameraSettings,
         render_settings: RenderSettings,
+        morton_code: torch.Tensor,
         vox_roots: torch.Tensor,
         vox_length: torch.Tensor,
         vox2corners: torch.Tensor,
@@ -103,15 +104,12 @@ def rasterize_voxels_main(
         # Geometry data
         vox_roots,
         vox_length,
-        vox2corners,
-        vox_params_geo,
-        vox_params_color,
 
         # Debug flag
         render_settings.debug,
     )
     torch.cuda.synchronize()
-
+    preprocessed = (n_duplicates, voxelDataBuffer)
 
     # Gather 3D scene paramerters
     visible_vox_idx = torch.where(n_duplicates > 0)[0]
@@ -138,13 +136,13 @@ def rasterize_voxels_main(
     if subdiv_p.device != device:
         raise Exception("Device mismatch: subdiv_p.")
 
-
-    result_rendered = VoxelRasterizer.apply(
+    input_renderer = (
         camera_settings,
         render_settings,
         voxelDataBuffer,
 
         # Geometry data
+        morton_code,
         vox_roots,
         vox_length,
 
@@ -154,7 +152,23 @@ def rasterize_voxels_main(
         subdiv_p
     )
 
-    return result_rendered
+    result_rendered = VoxelRasterizer.apply(
+        camera_settings,
+        render_settings,
+        voxelDataBuffer,
+
+        # Geometry data
+        morton_code,
+        vox_roots,
+        vox_length,
+
+        # 3d scene parameters
+        geos,
+        rgbs,
+        subdiv_p
+    )
+
+    return (preprocessed, input_renderer, result_rendered)
 
 
 class VoxelRasterizer(torch.autograd.Function):
@@ -166,6 +180,7 @@ class VoxelRasterizer(torch.autograd.Function):
         voxelDataBuffer,
 
         # Geometry data
+        morton_codes,
         vox_roots,
         vox_length,
 
@@ -185,11 +200,12 @@ class VoxelRasterizer(torch.autograd.Function):
             camera_settings.w2c_matrix,
             camera_settings.c2w_matrix,
 
-            raster_settings.n_samp_per_vox,
+            raster_settings.num_sample_per_vox,
             raster_settings.bg_color,
             raster_settings.need_depth,
             raster_settings.track_max_w,
 
+            morton_codes,
             vox_roots,
             vox_length,
             geos,
@@ -207,9 +223,10 @@ class VoxelRasterizer(torch.autograd.Function):
         ctx.num_vox_duplicated = num_vox_duplicated
 
         ctx.save_for_backward(
-            vox_roots, vox_length,
-            geos, rgbs,
-            voxelDataBuffer, voxels2raysBuffer, raysBuffer, out_T)
+            morton_codes, vox_roots, vox_length,
+            geos, rgbs, out_T,
+            voxelDataBuffer, voxels2raysBuffer, raysBuffer,
+        )
         ctx.mark_non_differentiable(max_w)
         return out_color, out_T, max_w
 
@@ -220,9 +237,9 @@ class VoxelRasterizer(torch.autograd.Function):
         raster_settings = ctx.raster_settings
         num_vox_duplicated = ctx.num_vox_duplicated
         (
-            vox_roots, vox_length, 
-            geos, rgbs, voxelDataBuffer, 
-            voxels2raysBuffer, raysBuffer, out_T
+            morton_codes, vox_roots, vox_length, 
+            geos, rgbs, out_T,
+            voxelDataBuffer, voxels2raysBuffer, raysBuffer, out_T
         ) = ctx.saved_tensors
 
         
@@ -238,9 +255,10 @@ class VoxelRasterizer(torch.autograd.Function):
             camera_settings.w2c_matrix,
             camera_settings.c2w_matrix,
 
-            raster_settings.n_samp_per_vox,
+            raster_settings.num_sample_per_vox,
             raster_settings.bg_color,
 
+            morton_codes,
             vox_roots,
             vox_length,
             geos,
@@ -262,6 +280,7 @@ class VoxelRasterizer(torch.autograd.Function):
             None, # => camera_settings
             None, # => raster_settings
             None, # => voxelDataBuffer
+            None, # => morton_code
             None, # => vox_roots
             None, # => vox_length
             dL_dgeos, # => geos

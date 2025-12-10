@@ -18,7 +18,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, modulee) {
     // Preprocessing
     modulee.def("rasterize_preprocess", &PREPROCESS::rasterize_preprocess);
     
-    // rendering
+    // Rendering
     modulee.def("voxels_rasterizing", &VOXEL_RASTERIZER::voxels_rasterizing);
     modulee.def("voxels_backward_rasterizing", &VOXEL_RASTERIZER_BACKWARD::voxels_backward_rasterizing);
 

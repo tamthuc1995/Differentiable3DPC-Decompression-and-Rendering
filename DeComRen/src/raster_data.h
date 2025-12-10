@@ -78,11 +78,11 @@ namespace RASTER_DATA {
         // Array of size: num_tiles x 1
         //  -- store the ACTUAL last index pointing to duplicated voxels vox_list_keys of the tile
         //  -- for the backward rendering stage.
-        uint32_t* actual_last;
+        uint32_t* tile_last_vox;
         
         // Array of size: num pixels x 1
         //  -- store last contributed sub-index of duplicated voxels in vox_list_keys (offset from first2last.first )
-        uint32_t* actual_cost;
+        uint32_t* actual_scanned_vox;
 
         static GroupRaysData sizeAloc(char*& chunk, size_t N, size_t n_tiles);
     };

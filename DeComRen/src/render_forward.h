@@ -23,6 +23,7 @@ voxels_rasterizing(
     const bool need_depth,
     const bool track_max_w,
 
+    const torch::Tensor& octree_paths,
     const torch::Tensor& vox_roots,
     const torch::Tensor& vox_length,
     const torch::Tensor& geos,

@@ -80,20 +80,17 @@ namespace VOXEL_RASTERIZER {
         }
 
         // Compute camera info.
-        float3 ro, rd, rd_inv;
-        float rd_norm_inv;
         const float3 cam_rd = {
             (pixf.x + 0.5f - cx) * 2.f * tan_fovx / (float)W,
             (pixf.y + 0.5f - cy) * 2.f * tan_fovy / (float)H,
             1.f
         };
         const float rd_norm = sqrtf(dot(cam_rd, cam_rd));
+        const float rd_norm_inv = 1.f / rd_norm;
+        const float3 ro = last_col_3x4(c2w_matrix);
         const float3 rd_raw = rotate_3x4(c2w_matrix, cam_rd);
-        rd_norm_inv = 1.f / rd_norm;
-        ro = last_col_3x4(c2w_matrix);
-        rd = rd_raw * rd_norm_inv;
-        rd_inv = {1.f/ rd.x, 1.f / rd.y, 1.f / rd.z};
-
+        const float3 rd = rd_raw * rd_norm_inv;
+        const float3 rd_inv = {1.f/ rd.x, 1.f / rd.y, 1.f / rd.z};
         const uint32_t pix_quad_id = compute_direction_quadrant_id(rd);
 
         // Check if this thread is associated with a valid pixel or outside.
@@ -153,7 +150,7 @@ namespace VOXEL_RASTERIZER {
                 collected_quad_id[thread_id] = quad_id;
                 collected_bbox[thread_id] = bboxes[vox_id];
                 collected_vox_r[thread_id] = vox_roots[vox_id];
-                collected_vox_l[thread_id] = vox_length[0];
+                collected_vox_l[thread_id] = vox_length[vox_id];
                 for (int k=0; k<8; ++k)
                     collected_geo_params[thread_id*8 + k] = geos[vox_id*8 + k];
                 collected_rgb[thread_id] = rgbs[vox_id];
@@ -309,7 +306,7 @@ namespace VOXEL_RASTERIZER {
             const int n_samp_dmed = 16;
 
             float3 vox_r = vox_roots[D_med_vox_id];
-            float vox_l = vox_length[0];
+            float vox_l = vox_length[D_med_vox_id];
             float geo_params[8];
             for (int k=0; k<8; ++k)
                 geo_params[k] = geos[D_med_vox_id*8 + k];
@@ -401,7 +398,7 @@ namespace VOXEL_RASTERIZER {
         const float cy,
         const float* c2w_matrix,
         
-        const int n_samp_per_vox,
+        const int num_sample_per_vox,
         const float bg_color,
         const bool need_depth,
 
@@ -422,9 +419,9 @@ namespace VOXEL_RASTERIZER {
         const bool track_max_w = (max_w != nullptr);
 
         const auto kernel_func =
-            (n_samp_per_vox == 3) ?
+            (num_sample_per_vox == 3) ?
                 FwRendFunc(3) :
-            (n_samp_per_vox == 2) ?
+            (num_sample_per_vox == 2) ?
                 FwRendFunc(2) :
                 FwRendFunc(1) ;
 
@@ -590,7 +587,7 @@ namespace VOXEL_RASTERIZER {
         const float* c2w_matrix,
 
         const int N,
-        const int n_samp_per_vox,
+        const int num_sample_per_vox,
         const float bg_color,
         const bool need_depth,
 
@@ -694,7 +691,7 @@ namespace VOXEL_RASTERIZER {
             cy,
             c2w_matrix,
 
-            n_samp_per_vox,
+            num_sample_per_vox,
             bg_color,
             need_depth,
 
@@ -719,7 +716,7 @@ namespace VOXEL_RASTERIZER {
 
 
     // Interface for python to run forward rasterization.
-    std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+    std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
     voxels_rasterizing(
         const int image_width,
         const int image_height,
@@ -730,7 +727,7 @@ namespace VOXEL_RASTERIZER {
         const torch::Tensor& w2c_matrix,
         const torch::Tensor& c2w_matrix,
 
-        const int n_samp_per_vox,
+        const int num_sample_per_vox,
         const float bg_color,
         const bool need_depth,
         const bool track_max_w,
@@ -791,7 +788,7 @@ namespace VOXEL_RASTERIZER {
                 
                 
                 N,
-                n_samp_per_vox,
+                num_sample_per_vox,
                 bg_color,
                 need_depth,
 
@@ -847,6 +844,6 @@ namespace VOXEL_RASTERIZER {
         // CHECK_CUDA(debug)
 
         // return std::make_tuple(num_vox_duplicated, out_color, out_color, cam_quadrant_bitsets, cc_ndup_per_vox, cc_ndup_per_vox_csum);
-        return std::make_tuple(num_vox_duplicated, voxels2raysBuffer, raysBuffer, out_color, out_T, max_w);
+        return std::make_tuple(num_vox_duplicated, voxels2raysBuffer, raysBuffer, out_color, out_depth, out_T, max_w);
     }
 }

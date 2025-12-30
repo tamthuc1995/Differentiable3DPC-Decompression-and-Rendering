@@ -185,6 +185,11 @@ __forceinline__ __device__ float exp_linear_11(float x)
     return (x > 1.1f) ? x : expf(0.909090909091f * x - 0.904689820196f);
 }
 
+__forceinline__ __device__ float exp_linear_11_bw(float x)
+{
+    return (x > 1.1f) ? 1.0f : 0.909090909091f * expf(0.909090909091f * x - 0.904689820196f);
+}
+
 
 // Debugging helper.
 #define CHECK_CUDA(debug) \

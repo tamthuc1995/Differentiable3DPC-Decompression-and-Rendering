@@ -168,7 +168,7 @@ def rasterize_voxels_main(
         subdiv_p
     )
 
-    return (preprocessed, input_renderer, result_rendered)
+    return result_rendered
 
 
 class VoxelRasterizer(torch.autograd.Function):
@@ -215,7 +215,7 @@ class VoxelRasterizer(torch.autograd.Function):
             raster_settings.debug,
         )
 
-        num_vox_duplicated, voxels2raysBuffer, raysBuffer, out_color, out_T, max_w = _C.voxels_rasterizing(*args)
+        num_vox_duplicated, voxels2raysBuffer, raysBuffer, out_color, out_depth, out_T, max_w = _C.voxels_rasterizing(*args)
 
         # Keep relevant tensors for backward
         ctx.camera_settings    = camera_settings
@@ -228,10 +228,10 @@ class VoxelRasterizer(torch.autograd.Function):
             voxelDataBuffer, voxels2raysBuffer, raysBuffer,
         )
         ctx.mark_non_differentiable(max_w)
-        return out_color, out_T, max_w
+        return out_color, out_depth, out_T, max_w
 
     @staticmethod
-    def backward(ctx, dL_dout_color):
+    def backward(ctx, dL_dout_color, dL_dout_depth, dL_dout_T, dL_dmax_w):
         # Restore necessary values from context
         camera_settings = ctx.camera_settings
         raster_settings = ctx.raster_settings

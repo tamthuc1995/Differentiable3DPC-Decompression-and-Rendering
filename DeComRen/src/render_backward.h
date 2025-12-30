@@ -10,7 +10,7 @@ namespace VOXEL_RASTERIZER_BACKWARD
 // Interface for python to run backward pass of voxel rasterization.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 voxels_backward_rasterizing(
-    const int R,
+    const int Ndup,
     
     const int image_width,
     const int image_height,
@@ -22,9 +22,10 @@ voxels_backward_rasterizing(
     const torch::Tensor& c2w_matrix,
 
     
-    const int n_samp_per_vox,
+    const int num_sample_per_vox,
     const float bg_color,
 
+    const torch::Tensor& morton_codes,
     const torch::Tensor& vox_roots,
     const torch::Tensor& vox_length,
     const torch::Tensor& geos,

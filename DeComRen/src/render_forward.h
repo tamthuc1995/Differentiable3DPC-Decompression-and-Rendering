@@ -7,7 +7,7 @@
 namespace VOXEL_RASTERIZER {
 
 // Interface for python to run forward rasterization.
-std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 voxels_rasterizing(
     const int image_width, 
     const int image_height,
@@ -18,12 +18,12 @@ voxels_rasterizing(
     const torch::Tensor& w2c_matrix,
     const torch::Tensor& c2w_matrix,
 
-    const int n_samp_per_vox,
+    const int num_sample_per_vox,
     const float bg_color,
     const bool need_depth,
     const bool track_max_w,
 
-    const torch::Tensor& octree_paths,
+    const torch::Tensor& morton_codes,
     const torch::Tensor& vox_roots,
     const torch::Tensor& vox_length,
     const torch::Tensor& geos,

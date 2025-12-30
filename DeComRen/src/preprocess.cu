@@ -51,7 +51,7 @@ namespace PREPROCESS {
 
         // Load from global memory.
         const float3 vox_coner_000 = vox_roots[idx];
-        const float vox_len = vox_length[0]; // VOXELs HAVE SAME LENGTH at a given scale.
+        const float vox_len = vox_length[idx]; 
         const float3 cam_org = get_cam_position(c2w_matrix);
         float w2c[12];
         for (int i = 0; i < 12; i++)

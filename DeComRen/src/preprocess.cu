@@ -209,7 +209,6 @@ namespace PREPROCESS {
             AT_ERROR("vox_roots must have dimensions (N, 3)");
         
         const int N = vox_roots.size(0);
-        printf("N: %d \n", N);
         if (N == 0)
              AT_ERROR("Are you trying to render from zero voxels ??");
 

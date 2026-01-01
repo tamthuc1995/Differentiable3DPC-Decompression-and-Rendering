@@ -239,7 +239,7 @@ class VoxelRasterizer(torch.autograd.Function):
         (
             morton_codes, vox_roots, vox_length, 
             geos, rgbs, out_T,
-            voxelDataBuffer, voxels2raysBuffer, raysBuffer, out_T
+            voxelDataBuffer, voxels2raysBuffer, raysBuffer
         ) = ctx.saved_tensors
 
         
@@ -342,8 +342,8 @@ class GatherColorParams(torch.autograd.Function):
     def backward(ctx, dL_drgb_params):
         # Restore necessary values from context
         num_voxels = ctx.num_voxels
-        visible_vox = ctx.saved_tensors
+        visible_vox = ctx.saved_tensors[0]
 
         dL_dcolor_params = _C.gather_color_params_bw(visible_vox, num_voxels, dL_drgb_params)
 
-        return None, None, dL_dcolor_params
+        return None, dL_dcolor_params

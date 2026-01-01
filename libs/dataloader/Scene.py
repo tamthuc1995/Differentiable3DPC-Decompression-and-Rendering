@@ -140,13 +140,13 @@ def read_from_colmap_dataset(source_path, image_dir_name):
         if view.camera.model.name == "SIMPLE_PINHOLE":
             focal_x, cx, cy = view.camera.params
             fovx = 2 * np.arctan(view.camera.width / (2 * focal_x))
-            fovy = 2 * np.arctan(view.camera.width / (2 * focal_x))
+            fovy = 2 * np.arctan(view.camera.height / (2 * focal_x))
             cx_p = cx / view.camera.width
             cy_p = cy / view.camera.height
         elif view.camera.model.name == "PINHOLE":
             focal_x, focal_y, cx, cy = view.camera.params
             fovx = 2 * np.arctan(view.camera.width / (2 * focal_x))
-            fovy = 2 * np.arctan(view.camera.width / (2 * focal_y))
+            fovy = 2 * np.arctan(view.camera.height / (2 * focal_y))
             cx_p = cx / view.camera.width
             cy_p = cy / view.camera.height
         else:

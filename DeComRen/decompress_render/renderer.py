@@ -56,6 +56,282 @@ def gather_geometry_and_color(
     return vox_params
 
 
+def geometry_attention_transform_main(
+        camera_settings: CameraSettings,
+        render_settings: RenderSettings,
+        morton_code: torch.Tensor,
+        vox_roots: torch.Tensor,
+        vox_length: torch.Tensor,
+        vox2corners: torch.Tensor,
+        vox_params_geo: torch.Tensor,
+        vox_params_attribute: torch.Tensor,
+    ):
+
+
+    # Checking
+    if not isinstance(camera_settings, CameraSettings):
+        raise Exception("Expect RasterSettings as first argument.")
+    if render_settings.num_sample_per_vox > _C.MAX_NUM_SAMPLE or render_settings.num_sample_per_vox < 1:
+        raise Exception(f"num_sample_per_vox should be in range [1, {_C.MAX_NUM_SAMPLE}].")
+
+
+    N = vox_roots.shape[0]
+    device = vox_roots.device
+    ##
+    if len(vox_roots.shape) != 2 or vox_roots.shape[1] != 3:
+        raise Exception("Expect vox_centers in shape [N, 3].")
+    ##
+    if camera_settings.w2c_matrix.device != device or \
+            camera_settings.c2w_matrix.device != device or \
+            vox_roots.device != device:
+        raise Exception("Device mismatch.")
+
+
+    # # Preprocess octree
+    n_duplicates, voxelDataBuffer = _C.rasterize_preprocess(
+        # Cam setting
+        camera_settings.image_width,
+        camera_settings.image_height,
+        camera_settings.tanfovx,
+        camera_settings.tanfovy,
+        camera_settings.cx,
+        camera_settings.cy,
+        camera_settings.w2c_matrix,
+        camera_settings.c2w_matrix,
+
+        # Render setting
+        render_settings.near,
+
+        # Geometry data
+        vox_roots,
+        vox_length,
+
+        # Debug flag
+        render_settings.debug,
+    )
+    torch.cuda.synchronize()
+    preprocessed = (n_duplicates, voxelDataBuffer)
+
+    # Gather 3D scene paramerters
+    visible_vox_idx = torch.where(n_duplicates > 0)[0]
+    # Forward voxel parameters
+
+    vox_params = gather_geometry_and_color(visible_vox_idx, vox2corners, vox_params_geo, vox_params_attribute)
+    geos = vox_params['geos']
+    attribute = vox_params['rgbs']
+    subdiv_p = vox_params['subdiv_p']
+
+
+    # Some voxel parameters checking
+    if geos.shape != (N, 8):
+        raise Exception(f"Expect geos in ({N}, 8) but got", geos.shape)
+    if attribute.shape[0] != N:
+        raise Exception(f"Expect rgbs in ({N}, 3) but got", attribute.shape)
+    if subdiv_p.shape[0] != N:
+        raise Exception(f"Expect subdiv_p in ({N}, 1) but got", subdiv_p.shape)
+
+    if geos.device != device:
+        raise Exception("Device mismatch: geos.")
+    if attribute.device != device:
+        raise Exception("Device mismatch: rgbs.")
+    if subdiv_p.device != device:
+        raise Exception("Device mismatch: subdiv_p.")
+
+    output_transformed_attributes = VoxelGeometryTransform.apply(
+        camera_settings,
+        render_settings,
+        voxelDataBuffer,
+
+        # Geometry data
+        morton_code,
+        vox_roots,
+        vox_length,
+
+        # 3d scene parameters
+        geos,
+        attribute,
+        subdiv_p
+    )
+
+    return output_transformed_attributes
+
+
+
+class VoxelGeometryTransform(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx,
+        camera_settings,
+        raster_settings,
+        voxelDataBuffer,
+
+        # Geometry data
+        morton_codes,
+        vox_roots,
+        vox_length,
+
+        geos,
+        attribute,
+        subdiv_p
+    ):
+
+
+        # \Phi
+        num_vox_duplicated, voxels2raysBuffer, raysBuffer, out_transformed_attribute_half, out_depth, out_T, max_w = _C.voxels_rasterizing(
+            camera_settings.image_width,
+            camera_settings.image_height,
+            camera_settings.tanfovx,
+            camera_settings.tanfovy,
+            camera_settings.cx,
+            camera_settings.cy,
+            camera_settings.w2c_matrix,
+            camera_settings.c2w_matrix,
+
+            raster_settings.num_sample_per_vox,
+            raster_settings.bg_color,
+            raster_settings.need_depth,
+            raster_settings.track_max_w,
+
+            morton_codes,
+            vox_roots,
+            vox_length,
+            geos,
+            attribute,
+            voxelDataBuffer,
+
+            raster_settings.debug,
+        )
+
+        # \Phi^T
+        dL_dgeos, out_transformed_attribute, subdiv_p_bw = _C.voxels_backward_rasterizing(
+            num_vox_duplicated,
+
+            camera_settings.image_width,
+            camera_settings.image_height,
+            camera_settings.tanfovx,
+            camera_settings.tanfovy,
+            camera_settings.cx,
+            camera_settings.cy,
+            camera_settings.w2c_matrix,
+            camera_settings.c2w_matrix,
+
+            raster_settings.num_sample_per_vox,
+            raster_settings.bg_color,
+
+            morton_codes,
+            vox_roots,
+            vox_length,
+            geos,
+            attribute,
+
+            voxelDataBuffer,
+            voxels2raysBuffer,
+            raysBuffer,
+            out_T,
+
+            out_transformed_attribute_half,
+
+            raster_settings.debug,
+        )
+
+        # Keep relevant tensors for backward
+        ctx.camera_settings    = camera_settings
+        ctx.raster_settings    = raster_settings
+        ctx.num_vox_duplicated = num_vox_duplicated
+
+        ctx.save_for_backward(
+            morton_codes, vox_roots, vox_length,
+            geos, attribute, out_T,
+            voxelDataBuffer, voxels2raysBuffer, raysBuffer,
+        )
+        ctx.mark_non_differentiable(max_w)
+        return out_transformed_attribute
+
+    @staticmethod
+    def backward(ctx, dout_dtransformed_attribute):
+        # Restore necessary values from context
+        camera_settings = ctx.camera_settings
+        raster_settings = ctx.raster_settings
+        num_vox_duplicated = ctx.num_vox_duplicated
+        (
+            morton_codes, vox_roots, vox_length, 
+            geos, attribute, out_T,
+            voxelDataBuffer, voxels2raysBuffer, raysBuffer
+        ) = ctx.saved_tensors
+
+
+        # \Phi
+        num_vox_duplicated, voxels2raysBuffer, raysBuffer, dout_dattribute_half, out_depth, out_T, max_w = _C.voxels_rasterizing(
+            camera_settings.image_width,
+            camera_settings.image_height,
+            camera_settings.tanfovx,
+            camera_settings.tanfovy,
+            camera_settings.cx,
+            camera_settings.cy,
+            camera_settings.w2c_matrix,
+            camera_settings.c2w_matrix,
+
+            raster_settings.num_sample_per_vox,
+            raster_settings.bg_color,
+            raster_settings.need_depth,
+            raster_settings.track_max_w,
+
+            morton_codes,
+            vox_roots,
+            vox_length,
+            geos,
+            dout_dtransformed_attribute,
+            voxelDataBuffer,
+
+            raster_settings.debug,
+        )
+        # \Phi^T
+        dL_dgeos, dout_dattribute, subdiv_p_bw = _C.voxels_backward_rasterizing(
+            num_vox_duplicated,
+
+            camera_settings.image_width,
+            camera_settings.image_height,
+            camera_settings.tanfovx,
+            camera_settings.tanfovy,
+            camera_settings.cx,
+            camera_settings.cy,
+            camera_settings.w2c_matrix,
+            camera_settings.c2w_matrix,
+
+            raster_settings.num_sample_per_vox,
+            raster_settings.bg_color,
+
+            morton_codes,
+            vox_roots,
+            vox_length,
+            geos,
+            dout_dtransformed_attribute,
+
+            voxelDataBuffer,
+            voxels2raysBuffer,
+            raysBuffer,
+            out_T,
+
+            dout_dattribute_half,
+
+            raster_settings.debug,
+        )
+
+        grads = (
+            None, # => camera_settings
+            None, # => raster_settings
+            None, # => voxelDataBuffer
+            None, # => morton_code
+            None, # => vox_roots
+            None, # => vox_length
+            None, # => geos
+            dout_dattribute, # => dout_dattribute
+            None, # => subdivision priority
+        )
+
+        return grads
+
+
 def rasterize_voxels_main(
         camera_settings: CameraSettings,
         render_settings: RenderSettings,
@@ -84,7 +360,6 @@ def rasterize_voxels_main(
             camera_settings.c2w_matrix.device != device or \
             vox_roots.device != device:
         raise Exception("Device mismatch.")
-
 
     # # Preprocess octree
     n_duplicates, voxelDataBuffer = _C.rasterize_preprocess(
@@ -135,22 +410,6 @@ def rasterize_voxels_main(
         raise Exception("Device mismatch: rgbs.")
     if subdiv_p.device != device:
         raise Exception("Device mismatch: subdiv_p.")
-
-    input_renderer = (
-        camera_settings,
-        render_settings,
-        voxelDataBuffer,
-
-        # Geometry data
-        morton_code,
-        vox_roots,
-        vox_length,
-
-        # 3d scene parameters
-        geos,
-        rgbs,
-        subdiv_p
-    )
 
     result_rendered = VoxelRasterizer.apply(
         camera_settings,

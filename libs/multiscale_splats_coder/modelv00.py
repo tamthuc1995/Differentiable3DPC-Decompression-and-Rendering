@@ -318,6 +318,7 @@ class DensityField:
         # sqrtinv_diagonal = torch.ones_like(diagonal)
 
         max_degree = rotation_opt.get("max_degree", 10)
+        max_degree_grad = rotation_opt.get("max_degree_grad", 2)
         poly_coefs_sqrtinv = get_polynomials_coefs_sqrtinv(max_degree)
         signal = voxel_attribute
 
@@ -327,10 +328,18 @@ class DensityField:
         
         for p in range(1, len(poly_coefs_sqrtinv)):
             s = time.time()
-            Xb = self.apply_full_phiTphi_with_F(
-                temp_val*sqrtinv_diagonal,
-                scene_dataset
-            ) * sqrtinv_diagonal
+
+            if p <= max_degree_grad:
+                Xb = self.apply_full_phiTphi_with_F(
+                    temp_val*sqrtinv_diagonal,
+                    scene_dataset
+                ) * sqrtinv_diagonal
+            else:
+                with torch.no_grad():
+                    Xb = self.apply_full_phiTphi_with_F(
+                        temp_val*sqrtinv_diagonal,
+                        scene_dataset
+                    ) * sqrtinv_diagonal
 
             temp_val = temp_val - torch.tensor(2 * muy_phi) * Xb
             output = output + temp_val * torch.tensor(poly_coefs_sqrtinv[p] * np.sqrt(2*muy_phi))

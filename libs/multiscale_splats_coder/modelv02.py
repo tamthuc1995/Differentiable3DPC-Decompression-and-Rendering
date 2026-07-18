@@ -33,6 +33,11 @@ from src.sparse_voxel_model import SparseVoxelModel
 #     linewidth=1000       # Number of characters per line
 # )
 
+
+def resize_rendering(render, size, mode='bilinear', align_corners=False):
+    return torch.nn.functional.interpolate(
+        render[None], size=size, mode=mode, align_corners=align_corners, antialias=True)[0]
+
 def get_polynomials_coefs_sqrtinv(max_degree):
     list_b = [1]
     temp = 1
@@ -99,15 +104,18 @@ class DensityField:
     
     def apply_phi(self, view_info):
 
-        w, h = view_info.render_width, view_info.render_height
+        ss = 1.5
+        w_src, h_src = view_info.render_width, view_info.render_height
+        w, h = round(w_src * ss), round(h_src * ss)
+        w_ss, h_ss = w / w_src, h / h_src
 
         camera_settings = decompress_render.renderer.CameraSettings(
-            image_width=view_info.render_width, 
-            image_height=view_info.render_height, 
+            image_width=w,#view_info.render_width, 
+            image_height=h,#view_info.render_height, 
             tanfovx=view_info.tanfovx, 
             tanfovy=view_info.tanfovy, 
-            cx=view_info.cx,
-            cy=view_info.cy,
+            cx=view_info.cx * w_ss,
+            cy=view_info.cy * h_ss,
             w2c_matrix=view_info.world2view.cuda(),
             c2w_matrix=view_info.view2world.cuda()
         )
@@ -121,7 +129,7 @@ class DensityField:
             debug=False,
         )
 
-        out_color, _, _, _ = decompress_render.renderer.rasterize_voxels_main(
+        out_color, out_depth, out_T, max_w = decompress_render.renderer.rasterize_voxels_main(
             camera_settings=camera_settings,
             render_settings=render_settings,
             morton_code=self.voxel_morton_code,
@@ -131,6 +139,9 @@ class DensityField:
             vox_params_geo=self.corner_geo_params,
             vox_params_color=self.voxel_attribute_field,
         )
+        color = color + out_T * color.mean((1,2), keepdim=True)
+        print(f"color.shape={color.shape}")
+        color = resize_rendering(color, size=(h_src, w_src))
 
         rendered_image = torch.permute(out_color.clamp(0, 1), dims=(1, 2, 0)).detach()
 

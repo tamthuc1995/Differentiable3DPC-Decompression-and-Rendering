@@ -117,7 +117,7 @@ class ViewCreator:
 
         # Resize image if needed
         if downscale != 1:
-            size = (round(image.size[0] / downscale), round(image.size[1] / downscale))
+            size = (int(image.size[0] / downscale), int(image.size[1] / downscale))
             image = image.resize(size)
 
         # Convert image to tensor

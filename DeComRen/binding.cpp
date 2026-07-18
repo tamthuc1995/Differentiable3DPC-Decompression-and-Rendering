@@ -7,6 +7,7 @@
 #include "src/render_forward.h"
 #include "src/render_backward.h"
 #include "src/gather_voxel_params.h"
+#include "src/sh_compute.h"
 
 #include "src/utils.h"
 
@@ -27,6 +28,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, modulee) {
     modulee.def("gather_geo_params_bw", &VOXEL_PARAMS_GATHER::gather_geo_params_bw);
     modulee.def("gather_color_params", &VOXEL_PARAMS_GATHER::gather_color_params);
     modulee.def("gather_color_params_bw", &VOXEL_PARAMS_GATHER::gather_color_params_bw);
+    modulee.def("gather_color_from_shs", &SH_COMPUTE::sh_compute);
+    modulee.def("gather_color_from_shs_bw", &SH_COMPUTE::sh_compute_bw);
 
     // Read only constants
     modulee.attr("MAX_NUM_SAMPLE")    = pybind11::int_(MAX_NUM_SAMPLE);

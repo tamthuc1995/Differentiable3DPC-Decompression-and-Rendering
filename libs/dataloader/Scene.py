@@ -24,7 +24,9 @@ class Scene:
         self,
         source_path, image_dir_name="images",
         res_downscale=0.0, res_width=0,
-        encoder_view_every=8
+        test_view_every=8,
+        load_test_only=False,
+
     ):
 
         sparse_path = os.path.join(source_path, "sparse")
@@ -50,8 +52,10 @@ class Scene:
         )
         for view_i, viewInfo in enumerate(views_construct_list):
             # s = time.time()
-            self.viewDataTrain.append(view_creator(**viewInfo))
-            if (encoder_view_every>0) and (view_i % encoder_view_every ==0):
+            if not load_test_only:
+                self.viewDataTrain.append(view_creator(**viewInfo))
+            
+            if (test_view_every>0) and (view_i % test_view_every ==0):
                 self.viewDataEncoding.append(view_creator(**viewInfo))
                 # print(f"Done view {viewInfo["view_name"]} for testing in {time.time()-s}s")
             # print(f"Done view {viewInfo["view_name"]} for training in {time.time()-s}s")
@@ -61,7 +65,7 @@ class Scene:
     def get_train_views(self):
         return self.viewDataTrain
     
-    def get_encoder_views(self):
+    def get_test_views(self):
         return self.viewDataEncoding
 
 

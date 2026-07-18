@@ -27,6 +27,8 @@ def gather_geometry_and_color(
         visible_vox:  torch.Tensor,
         vox2corners: torch.Tensor,
         geometry_params: torch.Tensor,
+        ray_p1: torch.Tensor,    
+        ray_p0: torch.Tensor,
         color_params: torch.Tensor,    
     ):
 
@@ -39,10 +41,22 @@ def gather_geometry_and_color(
     )
 
     # Gather/Compute voxel colors
-    rgbs = GatherColorParams.apply(
-        visible_vox,
-        color_params
-    )
+    if color_params.shape[1] == 3:
+        rgbs = GatherColorParams.apply(
+            visible_vox,
+            color_params
+        )
+    elif color_params.shape[1] == 16:
+        active_sh_degree = 3
+        rgbs = SH_eval.apply(
+            active_sh_degree,
+            visible_vox,
+            ray_p1,
+            ray_p0,
+            color_params[:, 0, :],
+            color_params[:, 1: :],
+        )
+    
 
     # Pack everything
     vox_params = {
@@ -115,8 +129,9 @@ def geometry_attention_transform_main(
     # Gather 3D scene paramerters
     visible_vox_idx = torch.where(n_duplicates > 0)[0]
     # Forward voxel parameters
-
-    vox_params = gather_geometry_and_color(visible_vox_idx, vox2corners, vox_params_geo, vox_params_attribute)
+    cam_pos = camera_settings.c2w_matrix[:3, 3]
+    vox_centers = vox_roots + 0.5*vox_length
+    vox_params = gather_geometry_and_color(visible_vox_idx, vox2corners, vox_params_geo, vox_centers, cam_pos, vox_params_attribute)
     geos = vox_params['geos']
     attribute = vox_params['rgbs']
     subdiv_p = vox_params['subdiv_p']
@@ -390,7 +405,9 @@ def rasterize_voxels_main(
     visible_vox_idx = torch.where(n_duplicates > 0)[0]
     # Forward voxel parameters
 
-    vox_params = gather_geometry_and_color(visible_vox_idx, vox2corners, vox_params_geo, vox_params_color)
+    cam_pos = camera_settings.c2w_matrix[:3, 3]
+    vox_centers = vox_roots + 0.5*vox_length
+    vox_params = gather_geometry_and_color(visible_vox_idx, vox2corners, vox_params_geo, vox_centers, cam_pos, vox_params_color)
     geos = vox_params['geos']
     rgbs = vox_params['rgbs']
     subdiv_p = vox_params['subdiv_p']
@@ -606,3 +623,65 @@ class GatherColorParams(torch.autograd.Function):
         dL_dcolor_params = _C.gather_color_params_bw(visible_vox, num_voxels, dL_drgb_params)
 
         return None, dL_dcolor_params
+
+
+
+class SH_eval(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx,
+        active_sh_degree,
+        idx,
+        ray_p1, # Use dir to vox center
+        ray_p0,
+        sh0,
+        shs,
+    ):
+
+        if torch.is_tensor(ray_p1) and ray_p1.requires_grad:
+            raise NotImplementedError
+        if torch.is_tensor(ray_p0) and ray_p0.requires_grad:
+            raise NotImplementedError
+
+        if idx is None:
+            idx = torch.empty(0, dtype=torch.int64)
+
+        rgbs = _C.gather_color_from_shs(
+            active_sh_degree,
+            idx,
+            ray_p1,
+            ray_p0,
+            sh0,
+            shs,
+        )
+
+        ctx.active_sh_degree = active_sh_degree
+        ctx.M = 1 + shs.shape[1]
+        ctx.save_for_backward(idx, ray_p1, ray_p0, rgbs)
+        return rgbs
+
+    @staticmethod
+    def backward(ctx, dL_drgbs):
+        # Restore necessary values from context
+        idx, ray_p1, ray_p0, rgbs = ctx.saved_tensors
+        dL_dsh0, dL_dshs = _C.gather_color_from_shs_bw(
+            ctx.active_sh_degree,
+            ctx.M,
+            idx,
+            ray_p1,
+            ray_p0,
+            rgbs,
+            dL_drgbs,
+        )
+
+        grads = (
+            None, # => active_sh_degree
+            None, # => idx
+            None, # => vox_centers
+            None, # => cam_pos
+            None, # => viewdir
+            dL_dsh0,
+            dL_dshs,
+        )
+
+        return grads

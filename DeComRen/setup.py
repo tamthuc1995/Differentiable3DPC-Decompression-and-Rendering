@@ -16,6 +16,7 @@ setup(
                 "src/render_forward.cu",
                 "src/render_backward.cu",
                 "src/gather_voxel_params.cu",
+                "src/sh_compute.cu",
                 "binding.cpp"
             ],
             # extra_compile_args={"nvcc": ["-g -G"]},

@@ -49,23 +49,23 @@ def RahtPrologue(morton_code, mass=None):
     assert np.all(morton_code[:-1] < morton_code[1:])  # is sorted and unique
     N = len(morton_code)  # number of transform coefficients
     if mass is None:
-        mass = np.ones(N, dtype=np.float32)
+        mass = np.ones(N, dtype=np.float64)
     else:
         assert len(mass) == N
-        assert mass.dtype == np.float32
-    cum_mass = np.r_[np.array([0], dtype=np.float32), np.cumsum(mass)]  # exclusive cumsum
-    cum_unit = np.arange(N+1, dtype=np.int32)  # exclusive cumsum of unit masses
+        assert mass.dtype == np.float64
+    cum_mass = np.r_[np.array([0], dtype=np.float64), np.cumsum(mass)]  # exclusive cumsum
+    cum_unit = np.arange(N+1, dtype=np.int64)  # exclusive cumsum of unit masses
 
     # Allocate output arrays.
     m = morton_code[-1]  # maximum morton code, since list is sorted
     bindepth = int(m).bit_length()  # convert to int to access convenient bit_length()
     binlevel = [Object() for b in range(bindepth+1)]
-    coeff_binlevel = np.zeros(N, dtype=np.int32)
+    coeff_binlevel = np.zeros(N, dtype=np.int64)
 
     # Process one level at a time, from leaves at b=bindepth to root at b=0.
     for b in range(bindepth, -1, -1):
         if b == bindepth:  # initialize
-            first_descendant = np.arange(N, dtype=np.int32)
+            first_descendant = np.arange(N, dtype=np.int64)
         else:
             first_descendant = binlevel[b+1].first_descendant[binlevel[b+1].is_first_sibling]
         path_prefix = morton_code[first_descendant] >> (bindepth - b)
@@ -110,7 +110,7 @@ def Raht(binlevel, attributes):
     """
 
     # Allocate output array.
-    transformed_attributes = np.array(attributes, dtype=np.float32)
+    transformed_attributes = np.array(attributes, dtype=np.float64)
 
     # Process one level at a time, from leaves at b=bindepth to root at b=0.
     bindepth = len(binlevel) - 1
@@ -128,8 +128,8 @@ def Raht(binlevel, attributes):
         frac = m0 / (m0 + m1)
         alpha = np.sqrt(frac)[:, np.newaxis]
         beta = np.sqrt(1 - frac)[:, np.newaxis]
-        assert beta.dtype == np.float32
-        assert alpha.dtype == np.float32
+        assert beta.dtype == np.float64
+        assert alpha.dtype == np.float64
         transformed_attributes[i0] = alpha * x0 + beta * x1
         transformed_attributes[i1] = -beta * x0 + alpha * x1
 
@@ -148,7 +148,7 @@ def InvRaht(binlevel, transformed_attributes):
     """
 
     # Allocate output array.
-    attributes = np.array(transformed_attributes, dtype=np.float32)
+    attributes = np.array(transformed_attributes, dtype=np.float64)
 
     # Process one level at a time, from root at b=0 to leaves at b=bindepth.
     bindepth = len(binlevel) - 1
@@ -166,8 +166,8 @@ def InvRaht(binlevel, transformed_attributes):
         frac = m0 / (m0 + m1)
         alpha = np.sqrt(frac)[:, np.newaxis]
         beta = np.sqrt(1 - frac)[:, np.newaxis]
-        assert beta.dtype == np.float32
-        assert alpha.dtype == np.float32
+        assert beta.dtype == np.float64
+        assert alpha.dtype == np.float64
         attributes[i0] = alpha * x0 - beta * x1
         attributes[i1] = beta * x0 + alpha * x1
 

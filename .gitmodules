@@ -1,0 +1,3 @@
+[submodule "submodules/SVCompression"]
+	path = submodules/SVCompression
+	url = https://github.com/tamthuc1995/SVCompression.git
